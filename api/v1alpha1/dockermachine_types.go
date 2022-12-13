@@ -18,6 +18,11 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+)
+
+const (
+	MachineFinalizer = "dockermachine.infrastructure.x-k8s.io"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -28,14 +33,22 @@ type DockerMachineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of DockerMachine. Edit dockermachine_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ProviderID is the identifier of the DockerMachine instance
+	ProviderID *string `json:"providerID, omitempty"`
 }
 
 // DockerMachineStatus defines the observed state of DockerMachine
 type DockerMachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Ready indicate the docker infrastructure has been provisioned and is ready
+	// +optional
+	Ready bool `json:"ready"`
+
+	// Addresses contains the associated addresses for the docker machine.
+	// +optional
+	Addresses []clusterv1.MachineAddress `json:"addresses,omitempty"`
 }
 
 //+kubebuilder:object:root=true
