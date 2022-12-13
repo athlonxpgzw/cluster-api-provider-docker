@@ -33,7 +33,7 @@ import (
 
 	infrastructurev1alpha1 "github.com/athlonxpgzw/cluster-api-provider-docker/api/v1alpha1"
 	"github.com/athlonxpgzw/cluster-api-provider-docker/controllers"
-	"github.com/capi-samples/cluster-api-provider-docker/pkg/container"
+	"github.com/athlonxpgzw/cluster-api-provider-docker/pkg/container"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	//+kubebuilder:scaffold:imports
 )
