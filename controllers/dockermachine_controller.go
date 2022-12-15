@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"reflect"
 	"time"
 
 	"sigs.k8s.io/cluster-api/controllers/remote"
@@ -29,14 +31,18 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	infrav1 "github.com/athlonxpgzw/cluster-api-provider-docker/api/v1alpha1"
 	"github.com/athlonxpgzw/cluster-api-provider-docker/pkg/container"
 	"github.com/athlonxpgzw/cluster-api-provider-docker/pkg/docker"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	"sigs.k8s.io/kind/pkg/cluster/constants"
@@ -47,7 +53,7 @@ type DockerMachineReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	ContainerRuntime container.Runtime
-	tracker          *remote.ClusterCacheTracker
+	Tracker          *remote.ClusterCacheTracker
 }
 
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=dockermachines,verbs=get;list;watch;create;update;patch;delete
@@ -229,20 +235,144 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 		dockerMachine.Spec.Boostrapped = true
 	}
 
+	if err := setMachineAddress(ctx, dockerMachine, extMachine); err != nil {
+		logger.Error(err, "Failed to set the machine address")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	remoteClient, err := r.Tracker.GetClient(ctx, client.ObjectKeyFromObject(cluster))
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
+	}
+	if err := extMachine.SetNodeProviderID(ctx, remoteClient); err != nil {
+		if errors.As(err, &docker.ContainerNotRunningError{}) {
+			return ctrl.Result{}, errors.Wrap(err, "failed to patch the kubernetes node with the machine ProviderID")
+		}
+		logger.Error(err, "failed to patch the kubernetes node with the machine ProviderID")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	providerID := extMachine.ProviderID()
+	dockerMachine.Spec.ProviderID = &providerID
+
+	dockerMachine.Status.Ready = true
+
 	return ctrl.Result{}, nil
 }
 
 func (r *DockerMachineReconciler) GetBootstrapData(ctx context.Context, machine *clusterv1.Machine) (string, bootstrapv1.Format, error) {
-	return "TODO", bootstrapv1.CloudConfig, nil
+	if machine.Spec.Bootstrap.DataSecretName == nil {
+		return "", "", errors.New("error retriving bootstrap data: linked Machine's bootstrap.dataSecretName is nil")
+	}
+
+	s := &corev1.Secret{}
+	key := client.ObjectKey{Namespace: machine.GetNamespace(), Name: *machine.Spec.Bootstrap.DataSecretName}
+	if err := r.Client.Get(ctx, key, s); err != nil {
+		return "", "", errors.Wrapf(err, "failed to retrieve bootstrap data secret for DockerMachine %s", klog.KObj(machine))
+	}
+
+	value, ok := s.Data["value"]
+	if !ok {
+		return "", "", errors.New("error retrieving bootstrap Data: secret value is missing")
+	}
+
+	format := s.Data["format"]
+	if len(format) == 0 {
+		format = []byte(bootstrapv1.CloudConfig)
+	}
+
+	return base64.StdEncoding.EncodeToString(value), bootstrapv1.Format(format), nil
+}
+
+// setMachineAddress gets the address from the container corresponding to a docker node and sets it on the machine object
+func setMachineAddress(ctx context.Context, dockerMachine *infrav1.DockerMachine, extMachine *docker.Machine) error {
+	machineAddress, err := extMachine.Address(ctx)
+	if err != nil {
+		return err
+	}
+
+	dockerMachine.Status.Addresses = []clusterv1.MachineAddress{
+		{
+			Type:    clusterv1.MachineHostName,
+			Address: extMachine.ContainerName(),
+		},
+		{
+			Type:    clusterv1.MachineInternalIP,
+			Address: machineAddress,
+		},
+		{
+			Type:    clusterv1.MachineExternalIP,
+			Address: machineAddress,
+		},
+	}
+	return nil
 }
 
 func (r *DockerMachineReconciler) reconcileDelete(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine, dockerMachine *infrav1.DockerMachine, extMachine *docker.Machine, extLoadBalancer *docker.LoadBalancer) (_ ctrl.Result, retErr error) {
+	logger := log.FromContext(ctx)
+
+	patchHelper, err := patch.NewHelper(dockerMachine, r.Client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	conditions.MarkFalse(dockerMachine, infrav1.ContainerProvisionedCondition, clusterv1.DeletedReason, clusterv1.ConditionSeverityInfo, "")
+
+	if err := patchDockerMachine(ctx, patchHelper, dockerMachine); err != nil && retErr == nil {
+		logger.Error(err, "failed to patch dockerMachine")
+		retErr = err
+	}
+
+	// Delete the machine
+	if err := extMachine.Delete(ctx); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to delete dockerMachine")
+	}
+
+	// If the deleted machine is a control plane node, remote it from the loadbalancer configuration
+	if util.IsControlPlaneMachine(machine) {
+		if err := extLoadBalancer.UpdateConfiguration(ctx); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update DockerCluster.loadbalancer configuration ")
+		}
+	}
+
+	// Machine is deleted so remove the finalizer.
+	controllerutil.RemoveFinalizer(dockerMachine, infrav1.MachineFinalizer)
+
 	return ctrl.Result{}, nil
+}
+
+func patchDockerMachine(ctx context.Context, patchHelper *patch.Helper, dockerMachine *infrav1.DockerMachine) error {
+	conditions.SetSummary(dockerMachine,
+		conditions.WithConditions(
+			infrav1.ContainerProvisionedCondition,
+			infrav1.BootstrapExecSucceededCondition,
+		),
+		conditions.WithStepCounterIf(dockerMachine.ObjectMeta.DeletionTimestamp.IsZero() && dockerMachine.Spec.ProviderID == nil),
+	)
+	// Patch the object, ignoring conflicts on the conditions owned by the controller
+	return patchHelper.Patch(
+		ctx,
+		dockerMachine,
+		patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
+			clusterv1.ReadyCondition,
+			infrav1.BootstrapExecSucceededCondition,
+			infrav1.ContainerProvisionedCondition,
+		}},
+	)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DockerMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	var (
+		controlledType     = &infrav1.DockerMachine{}
+		controlledTypeName = reflect.TypeOf(controlledType).Elem().Name()
+		controlledTypeGVK  = infrav1.GroupVersion.WithKind(controlledTypeName)
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&infrav1.DockerMachine{}).
-		Complete(r)
+		For(controlledType).
+		Watches(
+			&source.Kind{Type: &clusterv1.Machine{}},
+			handler.EnqueueRequestsFromMapFunc(util.MachineToInfrastructureMapFunc(controlledTypeGVK)),
+		).Complete(r)
 }
