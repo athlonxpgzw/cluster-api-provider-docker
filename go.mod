@@ -2,12 +2,12 @@ module github.com/athlonxpgzw/cluster-api-provider-docker
 
 go 1.19
 
-replace sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v1.3.0
-
-replace github.com/capi-samples/cluster-api-provider-docker => github.com/capi-samples/cluster-api-provider-docker v0.1.0
+replace (
+	sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v1.3.1
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.14.0
+)
 
 require (
-	github.com/capi-samples/cluster-api-provider-docker v0.1.0
 	github.com/docker/docker v20.10.21+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/flatcar/ignition v0.36.2

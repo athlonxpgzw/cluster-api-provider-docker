@@ -34,15 +34,29 @@ type DockerMachineSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// ProviderID is the identifier of the DockerMachine instance
-	ProviderID *string `json:"providerID, omitempty"`
+	ProviderID *string `json:"providerID,omitempty"`
 
 	// CustomImage allows customizing the container image that is used for running the machine
 	//+optional
-	CustomImage string `json:"customImage, omitempty"`
+	CustomImage string `json:"customImage,omitempty"`
 
 	// Bootstrapped is true when the kubeadm bootstrapping has been running against this machine
 	//+optional
-	Boostrapped bool `json:"bootstrapped, omitempty"`
+	Boostrapped bool `json:"bootstrapped,omitempty"`
+}
+
+// Mount specifies a host volume to mount into a container
+// This is simplified version of kind v1alpha4.Mount types.
+type Mount struct {
+	// Path of the mount within the container.
+	ContainerPath string `json:"containerPath,omitempty"`
+
+	// Path of the mount on the host.
+	HostPath string `json:"hostPath,omitempty"`
+
+	//If set, the mount is Read-only.
+	//+optional
+	Readonly bool `json:"readOnly,omitempty"`
 }
 
 // DockerMachineStatus defines the observed state of DockerMachine

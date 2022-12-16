@@ -32,11 +32,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/controllers/remote"
+
 	infrastructurev1alpha1 "github.com/athlonxpgzw/cluster-api-provider-docker/api/v1alpha1"
 	"github.com/athlonxpgzw/cluster-api-provider-docker/controllers"
 	"github.com/athlonxpgzw/cluster-api-provider-docker/pkg/container"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/controllers/remote"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -139,6 +140,10 @@ func main() {
 		Tracker:          tracker,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DockerMachine")
+		os.Exit(1)
+	}
+	if err = (&infrastructurev1alpha1.DockerCluster{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DockerCluster")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
