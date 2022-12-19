@@ -107,12 +107,13 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		logger.Info(fmt.Sprintf("Please associate the machine with a cluster using the label %s: <name of cluster>", clusterv1.ClusterLabelName))
 		return ctrl.Result{}, nil
 	}
-	logger = logger.WithValues(cluster.Name)
+
+	logger = logger.WithValues("cluster", cluster.Name)
 
 	// Fetch the DockerCluster
 	dockerCluster := &infrav1.DockerCluster{}
 	dockerClusterName := client.ObjectKey{
-		Namespace: dockerCluster.Namespace,
+		Namespace: dockerMachine.Namespace,
 		Name:      cluster.Spec.InfrastructureRef.Name,
 	}
 	if err = r.Client.Get(ctx, dockerClusterName, dockerCluster); err != nil {
@@ -210,7 +211,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 		dockerMachine.Status.LoadBalancerConfigured = true
 	}
 
-	if !dockerMachine.Spec.Boostrapped {
+	if !dockerMachine.Spec.Bootstrapped {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer cancel()
 		if err := extMachine.CheckForBootstrapSuccess(timeoutCtx, false); err != nil {
@@ -232,7 +233,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 				return ctrl.Result{}, errors.Wrap(err, "failed to check for existence of bootstrap success file at /run/cluster-api/bootstrap-success.complete")
 			}
 		}
-		dockerMachine.Spec.Boostrapped = true
+		dockerMachine.Spec.Bootstrapped = true
 	}
 
 	if err := setMachineAddress(ctx, dockerMachine, extMachine); err != nil {

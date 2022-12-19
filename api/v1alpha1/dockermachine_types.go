@@ -34,6 +34,7 @@ type DockerMachineSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// ProviderID is the identifier of the DockerMachine instance
+	//+optional
 	ProviderID *string `json:"providerID,omitempty"`
 
 	// CustomImage allows customizing the container image that is used for running the machine
@@ -42,7 +43,7 @@ type DockerMachineSpec struct {
 
 	// Bootstrapped is true when the kubeadm bootstrapping has been running against this machine
 	//+optional
-	Boostrapped bool `json:"bootstrapped,omitempty"`
+	Bootstrapped bool `json:"bootstrapped,omitempty"`
 }
 
 // Mount specifies a host volume to mount into a container
