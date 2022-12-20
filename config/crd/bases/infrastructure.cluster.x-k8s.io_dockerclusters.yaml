@@ -35,7 +35,7 @@ spec:
           spec:
             description: DockerClusterSpec defines the desired state of DockerCluster
             properties:
-              ControlPlaneEndpoint:
+              controlPlaneEndpoint:
                 description: ControlPlaneEndpoint represents the endpoint used to
                   communicate with the control plane.
                 properties:
@@ -58,7 +58,7 @@ spec:
           status:
             description: DockerClusterStatus defines the observed state of DockerCluster
             properties:
-              Ready:
+              ready:
                 default: false
                 description: Ready indicates that the cluster is ready.
                 type: boolean
