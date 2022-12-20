@@ -42,7 +42,7 @@ type DockerClusterSpec struct {
 
 	// ControlPlaneEndpoint represents the endpoint used to communicate with the control plane.
 	// +optional
-	ControlPlaneEndpoint clusterv1.APIEndpoint `json:"ControlPlaneEndpoint"`
+	ControlPlaneEndpoint clusterv1.APIEndpoint `json:"controlPlaneEndpoint"`
 }
 
 // DockerClusterStatus defines the observed state of DockerCluster
@@ -53,7 +53,7 @@ type DockerClusterStatus struct {
 	//Ready indicates that the cluster is ready.
 	// +optional
 	// +kubebuilder:default=false
-	Ready bool `json:"Ready"`
+	Ready bool `json:"ready"`
 }
 
 //+kubebuilder:object:root=true
