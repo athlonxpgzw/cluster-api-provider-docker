@@ -22,6 +22,7 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"golang.org/x/net/context"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -97,6 +98,32 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
+
+	setupChecks(mgr)
+	setupReconcilers(ctx, mgr)
+	setupWebhooks(mgr)
+
+	//+kubebuilder:scaffold:builder
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctx); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func setupChecks(mgr ctrl.Manager) {
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+}
+
+func setupReconcilers(ctx context.Context, mgr ctrl.Manager) {
 	runtimeClient, err := container.NewDockerClient()
 	if err != nil {
 		setupLog.Error(err, "unable to establish container runtime connection", "controller", "reconciler")
@@ -143,24 +170,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DockerMachine")
 		os.Exit(1)
 	}
-	if err = (&infrastructurev1alpha1.DockerCluster{}).SetupWebhookWithManager(mgr); err != nil {
+}
+
+func setupWebhooks(mgr ctrl.Manager) {
+	if err := (&infrastructurev1alpha1.DockerCluster{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "DockerCluster")
-		os.Exit(1)
-	}
-	//+kubebuilder:scaffold:builder
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }
