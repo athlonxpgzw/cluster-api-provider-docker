@@ -2,6 +2,8 @@
 FROM golang:1.19 as builder
 ARG TARGETOS
 ARG TARGETARCH
+ARG HTTPS_PROXY=http://192.168.3.167:8118
+ARG HTTP_PROXY=http://192.168.3.167:8118
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -16,6 +18,7 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
+COPY vendor/ vendor/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
