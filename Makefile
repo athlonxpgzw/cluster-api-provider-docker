@@ -1,6 +1,10 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+TAG ?= dev
+REGISTRY ?= docker.io
+ORG ?= athlonxpgzw
+CONTROLLER_IMAGE_NAME := cluster-api-provider-docker
+IMG ?= $(REGISTRY)/$(ORG)/$(CONTROLLER_IMAGE_NAME):$(TAG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.25.0
 
